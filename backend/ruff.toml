@@ -1,0 +1,6 @@
+line-length = 120
+target-version = "py312"
+
+[lint]
+select = ["E9", "F", "B"]
+ignore = ["B008", "B904"]  # FastAPI Depends()/Query() defaults; HTTPException re-raise style

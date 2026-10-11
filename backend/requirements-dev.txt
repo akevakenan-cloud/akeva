@@ -1,0 +1,4 @@
+-r requirements.txt
+pytest>=8
+mongomock-motor>=0.0.34
+ruff>=0.6

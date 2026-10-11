@@ -1,0 +1,35 @@
+# Local development stack: MongoDB + API + admin console.
+#   docker compose up --build
+# Then create the first super-admin:
+#   docker compose exec api python -m app.scripts.create_superadmin --phone "+237690000000" --name "Your Name"
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes: [mongo-data:/data/db]
+    ports: ["27017:27017"]
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      AKEVA_MONGO_URI: mongodb://mongo:27017
+      AKEVA_CORS_ORIGINS: '["http://localhost:3000"]'
+    volumes: [documents:/data/storage]
+    ports: ["8000:8000"]
+    depends_on: [mongo]
+
+  admin:
+    build:
+      context: ./admin
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+        NEXT_PUBLIC_MAPBOX_TOKEN: ${MAPBOX_TOKEN:-}
+    restart: unless-stopped
+    ports: ["3000:3000"]
+    depends_on: [api]
+
+volumes:
+  mongo-data:
+  documents:
