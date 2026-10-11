@@ -91,6 +91,12 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("driver_id", ASCENDING), ("created_at", DESCENDING)]),
         IndexModel([("country", ASCENDING), ("city_id", ASCENDING)]),
     ],
+    "ride_messages": [IndexModel([("ride_id", ASCENDING), ("created_at", ASCENDING)])],
+    "ledger": [IndexModel([("driver_id", ASCENDING), ("created_at", DESCENDING)])],
+    "payouts": [
+        IndexModel([("status", ASCENDING), ("created_at", DESCENDING)]),
+        IndexModel([("driver_id", ASCENDING), ("created_at", DESCENDING)]),
+    ],
     "disputes": [IndexModel([("status", ASCENDING), ("created_at", DESCENDING)])],
     "deletion_requests": [IndexModel([("status", ASCENDING), ("created_at", DESCENDING)])],
 }

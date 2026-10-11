@@ -224,3 +224,83 @@ def test_channel_order():
     assert channel_order(None, "CM", False, first) == [S]     # WhatsApp switched off
     with pytest.raises(ChannelUnavailable):
         channel_order("whatsapp", "CM", False, first)
+
+
+# --- rides ------------------------------------------------------------------
+
+def test_ride_lifecycle_rules():
+    from app.domain.rides import RideTransitionError, next_ride_status
+
+    s = next_ride_status("requested", "accept", "driver")
+    s = next_ride_status(s, "arrive", "driver")
+    s = next_ride_status(s, "start", "driver")
+    assert next_ride_status(s, "complete", "driver").value == "completed"
+    assert next_ride_status("accepted", "cancel", "rider").value == "cancelled"
+    for bad in [("requested", "accept", "rider"), ("requested", "start", "driver"),
+                ("in_progress", "cancel", "rider"), ("completed", "cancel", "staff")]:
+        with pytest.raises(RideTransitionError):
+            next_ride_status(*bad)
+    assert next_ride_status("in_progress", "cancel", "staff").value == "cancelled"
+
+
+def test_haversine_and_estimate():
+    from app.domain.geo import Point, estimate_trip, haversine_km
+
+    douala_airport, akwa = Point(4.0061, 9.7194), Point(4.0511, 9.7008)
+    d = haversine_km(douala_airport, akwa)
+    assert 5.0 < d < 5.6
+    est = estimate_trip(douala_airport, akwa)
+    assert est.distance_km == round(d * 1.35, 2) and 18 < est.duration_min < 24
+
+
+def test_rank_drivers():
+    from datetime import datetime, timedelta, timezone
+
+    from app.domain.geo import Point
+    from app.domain.rides import Candidate, rank_drivers
+
+    now = datetime.now(timezone.utc)
+    pickup = Point(4.05, 9.70)
+    cands = [
+        Candidate("far", Point(4.20, 9.70), ("economy",), now),                 # ~16.7 km
+        Candidate("near", Point(4.055, 9.70), ("economy", "comfort"), now),     # ~0.6 km
+        Candidate("mid", Point(4.07, 9.70), ("economy",), now),                 # ~2.2 km
+        Candidate("stale", Point(4.051, 9.70), ("economy",), now - timedelta(minutes=5)),
+        Candidate("moto", Point(4.051, 9.70), ("moto",), now),
+    ]
+    got = rank_drivers(pickup, C.ECONOMY, cands, now, radius_km=5, limit=5)
+    assert [m.driver_id for m in got] == ["near", "mid"]
+    assert got[0].eta_min >= 1
+    assert [m.driver_id for m in rank_drivers(pickup, C.COMFORT, cands, now, 5, 5)] == ["near"]
+    assert rank_drivers(pickup, C.ECONOMY, cands, now, 5, 5, exclude={"near"})[0].driver_id == "mid"
+
+
+def test_final_fare_cap_and_gps_floor():
+    from datetime import datetime, timedelta, timezone
+
+    from app.domain.rides import final_fare
+
+    rule = PricingRule(C.ECONOMY, base_fare=500, per_km=250, per_minute=25, minimum_fare=1000)
+    t0 = datetime.now(timezone.utc)
+    est_total = calculate_fare(rule, 8, 20).total  # 3000
+    normal = final_fare(rule, est_total, tracked_km=8.4, estimated_km=8, started_at=t0,
+                        ended_at=t0 + timedelta(minutes=22))
+    assert normal.total == 3150
+    stuck = final_fare(rule, est_total, tracked_km=9, estimated_km=8, started_at=t0,
+                       ended_at=t0 + timedelta(minutes=120))  # huge traffic jam
+    assert stuck.total == 3900  # capped at estimate * 1.3
+    assert stuck.driver_earnings + stuck.commission == stuck.total
+    lost_gps = final_fare(rule, est_total, tracked_km=0, estimated_km=8, started_at=t0,
+                          ended_at=t0 + timedelta(minutes=20))
+    assert lost_gps.total == calculate_fare(rule, 5.6, 20).total
+
+
+def test_path_increment_ignores_noise_and_jumps():
+    from app.domain.geo import Point
+    from app.domain.rides import path_increment_km
+
+    a = Point(4.05, 9.70)
+    assert path_increment_km(None, a) == 0
+    assert path_increment_km(a, Point(4.0501, 9.70)) == 0          # ~11 m jitter
+    assert 0.5 < path_increment_km(a, Point(4.0555, 9.70)) < 0.7    # ~0.6 km
+    assert path_increment_km(a, Point(4.20, 9.70)) == 0             # 16 km glitch

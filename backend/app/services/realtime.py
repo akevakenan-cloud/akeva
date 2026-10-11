@@ -50,3 +50,8 @@ class Hub:
 hub = Hub()
 
 ADMIN_LIVE = "admin.live"
+
+
+def user_channel(user_id: str) -> str:
+    """Each rider/driver app holds one WebSocket that receives all of its events."""
+    return f"user.{user_id}"

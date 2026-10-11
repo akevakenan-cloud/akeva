@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -10,7 +11,8 @@ from fastapi.responses import JSONResponse
 
 from .core import db
 from .core.config import get_settings
-from .routers import admin, auth, drivers, me, public, ws
+from .routers import admin, auth, drivers, me, public, rides, ws
+from .services.rides import dispatch_loop
 
 logging.basicConfig(level=logging.INFO)
 
@@ -21,7 +23,11 @@ async def lifespan(app: FastAPI):
         await db.connect()
     else:  # tests inject their own database
         await db.ensure_indexes(db._db)
+    # Tests drive dispatch by calling dispatch_tick() directly.
+    dispatcher = None if get_settings().env == "test" else asyncio.create_task(dispatch_loop())
     yield
+    if dispatcher:
+        dispatcher.cancel()
     await db.disconnect()
 
 
@@ -58,7 +64,7 @@ def create_app() -> FastAPI:
                             content={"detail": {"code": "validation_error", "errors": errors}})
 
     api_prefix = "/api/v1"
-    for r in (public.router, auth.router, me.router, drivers.router, admin.router):
+    for r in (public.router, auth.router, me.router, drivers.router, rides.router, admin.router):
         app.include_router(r, prefix=api_prefix)
     app.include_router(ws.router, prefix=api_prefix)
     return app

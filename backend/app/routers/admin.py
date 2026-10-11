@@ -20,19 +20,24 @@ from ..domain.enums import AccountStatus, Role, RideStatus
 from ..domain.pricing import calculate_fare
 from ..domain.status import StatusAction
 from ..models.schemas import (
+    AdminCancelIn,
     CategoryOverrideIn,
     CityIn,
     CityPatch,
     DeletionDecisionIn,
     DisputeUpdateIn,
     FarePreviewIn,
+    PaymentDecisionIn,
+    PayoutDecisionIn,
     PricingRuleIn,
     StaffCreateIn,
     StatusActionIn,
 )
-from ..services import audit
+from ..domain.rides import Actor, RideAction
+from ..services import audit, ledger
+from ..services import rides as ride_svc
 from ..services.pricing import RULE_FIELDS, resolve_rule
-from ..services.storage import purge_owner_files, read_document
+from ..services.storage import decrypt_field, purge_owner_files, read_document
 from ..services.users import (
     apply_status_action,
     documents_of,
@@ -81,12 +86,13 @@ async def overview(admin: Staff) -> dict:
         "drivers_online": await db.users.count_documents(
             {"role": "driver", "driver.online": True, "deleted_at": None}),
         "active_rides": await db.rides.count_documents({"status": {"$in": [
-            RideStatus.ACCEPTED.value, RideStatus.ARRIVING.value, RideStatus.IN_PROGRESS.value]}}),
+            RideStatus.ACCEPTED.value, RideStatus.ARRIVED.value, RideStatus.IN_PROGRESS.value]}}),
         "rides_24h": rides_24h,
         "gross_24h": sum((r.get("fare") or {}).get("total", 0) for r in completed),
         "commission_24h": sum((r.get("fare") or {}).get("commission", 0) for r in completed),
         "open_disputes": await db.disputes.count_documents({"status": {"$in": ["open", "in_review"]}}),
         "pending_deletions": await db.deletion_requests.count_documents({"status": "pending"}),
+        "pending_payouts": await db.payouts.count_documents({"status": "requested"}),
     }
 
 
@@ -233,6 +239,58 @@ async def get_ride(ride_id: str, admin: Staff) -> dict:
     if ride is None:
         raise _not_found()
     return _ride_out(ride)
+
+
+@router.post("/rides/{ride_id}/cancel")
+async def cancel_ride(ride_id: str, body: AdminCancelIn, admin: Staff) -> dict:
+    """Support can cancel any unfinished ride, including one in progress."""
+    return _ride_out(await ride_svc.advance(ride_id, admin, RideAction.CANCEL, body.reason, actor=Actor.STAFF))
+
+
+@router.post("/rides/{ride_id}/payment")
+async def decide_payment(ride_id: str, body: PaymentDecisionIn, admin: Staff) -> dict:
+    """Confirm or fail a pending Mobile Money payment."""
+    return _ride_out(await ride_svc.mark_payment(ride_id, admin, body.paid, body.reference))
+
+
+@router.get("/payouts")
+async def list_payouts(admin: Staff, status_: str = Query(default="requested", alias="status")) -> list[dict]:
+    out = []
+    async for p in get_db().payouts.find({"status": status_}).sort("created_at", 1):
+        driver = await get_db().users.find_one({"_id": p["driver_id"]}, {"payout": 1})
+        item = _ride_out(p)
+        payout = (driver or {}).get("payout") or {}
+        item["destination"] = {
+            "method": payout.get("method"), "account_name": payout.get("account_name"),
+            "account_number": decrypt_field(payout.get("account_number"), f"{p['driver_id']}:payout"),
+            "bank_name": payout.get("bank_name"),
+        }
+        item["balance"] = await ledger.balance(p["driver_id"])
+        out.append(item)
+    return out
+
+
+@router.post("/payouts/{payout_id}/decision")
+async def decide_payout(payout_id: str, body: PayoutDecisionIn, admin: Staff, request: Request) -> dict:
+    db = get_db()
+    payout = await db.payouts.find_one({"_id": payout_id, "status": "requested"})
+    if payout is None:
+        raise _not_found()
+    if body.approve and not body.reference:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail={"code": "reference_required"})
+    new_status = "paid" if body.approve else "rejected"
+    res = await db.payouts.update_one({"_id": payout_id, "status": "requested"}, {"$set": {
+        "status": new_status, "reference": body.reference, "note": body.note,
+        "decided_by": admin["_id"], "decided_at": utcnow()}})
+    if res.modified_count == 0:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail={"code": "payout_changed"})
+    if not body.approve:
+        await ledger.add_entry(payout["driver_id"], "payout_reversal", payout["amount"], payout_id=payout_id,
+                               note=body.note)
+    await audit.record(admin, f"payout.{new_status}", "driver", payout["driver_id"],
+                       meta={"payout_id": payout_id, "amount": payout["amount"], "reference": body.reference},
+                       reason=body.note, ip=client_ip(request))
+    return _ride_out(await db.payouts.find_one({"_id": payout_id}))
 
 
 def _ride_out(r: dict) -> dict:

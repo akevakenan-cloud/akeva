@@ -53,6 +53,7 @@ def new_user(phone: str, country: str, role: Role, language: str = "fr",
             "online": False,
             "location": None,  # GeoJSON point
             "location_updated_at": None,
+            "current_ride_id": None,
         }
     return doc
 

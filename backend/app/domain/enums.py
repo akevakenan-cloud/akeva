@@ -88,12 +88,27 @@ class PaymentMethod(str, Enum):
 
 
 class RideStatus(str, Enum):
-    REQUESTED = "requested"
-    ACCEPTED = "accepted"
-    ARRIVING = "arriving"
+    REQUESTED = "requested"  # looking for a driver
+    ACCEPTED = "accepted"  # driver heading to pickup
+    ARRIVED = "arrived"  # driver waiting at pickup
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
+
+
+ACTIVE_RIDE_STATUSES = (RideStatus.ACCEPTED, RideStatus.ARRIVED, RideStatus.IN_PROGRESS)
+
+
+class PaymentStatus(str, Enum):
+    PENDING = "pending"  # mobile money requested, not yet confirmed
+    PAID = "paid"
+    FAILED = "failed"
+
+
+class PayoutStatus(str, Enum):
+    REQUESTED = "requested"
+    PAID = "paid"
+    REJECTED = "rejected"
 
 
 class DisputeStatus(str, Enum):

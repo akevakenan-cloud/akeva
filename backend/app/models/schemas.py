@@ -12,6 +12,7 @@ from ..domain.enums import (
     DisputeStatus,
     IdDocumentType,
     Language,
+    PaymentMethod,
     PayoutMethod,
     RideCategory,
     Role,
@@ -206,3 +207,63 @@ class StaffCreateIn(_In):
 class DeletionDecisionIn(_In):
     approve: bool
     note: str | None = Field(default=None, max_length=500)
+
+
+# --- rides ------------------------------------------------------------------
+
+class PlaceIn(_In):
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+    address: str | None = Field(default=None, max_length=200)
+
+
+class EstimateIn(_In):
+    pickup: PlaceIn
+    dropoff: PlaceIn
+    city_id: str | None = None
+    categories: list[RideCategory] | None = None  # None = all six
+
+
+class RideRequestIn(_In):
+    pickup: PlaceIn
+    dropoff: PlaceIn
+    category: RideCategory
+    payment_method: PaymentMethod = PaymentMethod.CASH
+    city_id: str | None = None
+
+
+class CancelIn(_In):
+    reason: str | None = Field(default=None, max_length=300)
+
+
+class RatingIn(_In):
+    stars: int = Field(ge=1, le=5)
+    comment: str | None = Field(default=None, max_length=500)
+
+
+class MessageIn(_In):
+    text: str = Field(min_length=1, max_length=500)
+
+
+class DisputeIn(_In):
+    subject: str = Field(min_length=3, max_length=120)
+    description: str = Field(min_length=3, max_length=2000)
+
+
+class PayoutRequestIn(_In):
+    amount: int = Field(ge=1000, le=10_000_000)
+
+
+class PaymentDecisionIn(_In):
+    paid: bool
+    reference: str | None = Field(default=None, max_length=120)
+
+
+class PayoutDecisionIn(_In):
+    approve: bool
+    reference: str | None = Field(default=None, max_length=120)  # mobile money / bank transfer id
+    note: str | None = Field(default=None, max_length=500)
+
+
+class AdminCancelIn(_In):
+    reason: str = Field(min_length=3, max_length=300)
