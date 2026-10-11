@@ -38,6 +38,16 @@ class Settings(BaseSettings):
     twilio_from_number: str = ""  # a Twilio number, or leave empty to use the sender ID
     twilio_messaging_service_sid: str = ""  # MG…; preferred when set (handles sender per country)
 
+    # WhatsApp delivery of login codes (Twilio). Meta requires a pre-approved
+    # "authentication" template; create one per language in Twilio's Content
+    # Template Builder and paste the HX… content SIDs here.
+    whatsapp_enabled: bool = False
+    twilio_whatsapp_from: str = ""  # your WhatsApp-enabled sender number, e.g. +14155550123
+    twilio_whatsapp_content_sid_fr: str = ""
+    twilio_whatsapp_content_sid_en: str = ""
+    # Countries that get WhatsApp first (e.g. while an SMS sender ID awaits registration): "CM,CG"
+    otp_whatsapp_first_countries: str = ""
+
     # Rate limits (requests per window)
     otp_requests_per_phone_per_hour: int = 5
     otp_requests_per_ip_per_hour: int = 30
@@ -68,6 +78,10 @@ class Settings(BaseSettings):
                 problems.append("AKEVA_SMS_PROVIDER cannot be 'console' in production")
             if self.sms_provider == "twilio" and not (self.twilio_account_sid and self.twilio_auth_token):
                 problems.append("AKEVA_TWILIO_ACCOUNT_SID and AKEVA_TWILIO_AUTH_TOKEN must be set")
+            if self.whatsapp_enabled and not (
+                    self.twilio_account_sid and self.twilio_auth_token and self.twilio_whatsapp_from
+                    and (self.twilio_whatsapp_content_sid_fr or self.twilio_whatsapp_content_sid_en)):
+                problems.append("WhatsApp needs AKEVA_TWILIO_WHATSAPP_FROM, a content SID and Twilio credentials")
             if problems:
                 raise ValueError("; ".join(problems))
         return self

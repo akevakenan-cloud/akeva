@@ -207,3 +207,20 @@ def test_missing_requirements_rider_passport():
     m = missing_requirements(Role.RIDER, profile, {DocumentType.SELFIE, DocumentType.ID_FRONT})
     assert m.fields == ["consent"]  # selfie consent missing
     assert m.documents == []
+
+
+# --- OTP channels -----------------------------------------------------------
+
+def test_channel_order():
+    from app.domain.otp_channels import Channel, ChannelUnavailable, channel_order, parse_countries
+
+    first = parse_countries(" cm, CG ,")
+    assert first == {"CM", "CG"}
+    W, S = Channel.WHATSAPP, Channel.SMS
+    assert channel_order(None, "CM", True, first) == [W, S]   # WhatsApp-first country
+    assert channel_order(None, "TD", True, first) == [S, W]   # everyone else: SMS first
+    assert channel_order("whatsapp", "TD", True, first) == [W, S]  # user asked for WhatsApp
+    assert channel_order("sms", "CM", True, first) == [S, W]
+    assert channel_order(None, "CM", False, first) == [S]     # WhatsApp switched off
+    with pytest.raises(ChannelUnavailable):
+        channel_order("whatsapp", "CM", False, first)

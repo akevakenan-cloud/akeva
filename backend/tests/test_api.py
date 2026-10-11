@@ -253,3 +253,60 @@ def test_sms_failure_returns_503_and_allows_retry(client, monkeypatch):
     monkeypatch.undo()
     # no stale code was left behind, so the resend timer doesn't block the retry
     assert client.post(f"{API}/auth/otp/request", json=body).status_code == 200
+
+
+@pytest.fixture()
+def whatsapp_on(monkeypatch):
+    from app.core.config import get_settings
+
+    s = get_settings()
+    monkeypatch.setattr(s, "whatsapp_enabled", True)
+    monkeypatch.setattr(s, "otp_whatsapp_first_countries", "CM,CG")
+    return s
+
+
+def test_whatsapp_first_country_and_channel_switch(client, whatsapp_on):
+    from app.services.sms import ConsoleSms, ConsoleWhatsApp
+
+    ConsoleSms.sent.clear()
+    ConsoleWhatsApp.sent.clear()
+    body = {"phone": "+237677440011", "app": "rider", "language": "en"}
+    r = client.post(f"{API}/auth/otp/request", json=body).json()
+    assert r["channel"] == "whatsapp" and r["alternate_channel"] == "sms"
+    assert ConsoleWhatsApp.sent[-1] == ("+237677440011", r["dev_code"], "en")
+    assert ConsoleSms.sent == []
+
+    # "Send by SMS instead" is allowed right away, once
+    r2 = client.post(f"{API}/auth/otp/request", json={**body, "channel": "sms"})
+    assert r2.status_code == 200 and r2.json()["channel"] == "sms"
+    r3 = client.post(f"{API}/auth/otp/request", json={**body, "channel": "whatsapp"})
+    assert r3.status_code == 429
+    # only the latest code works
+    if r["dev_code"] != r2.json()["dev_code"]:
+        assert client.post(f"{API}/auth/otp/verify", json={
+            "phone": body["phone"], "app": "rider", "code": r["dev_code"]}).status_code == 400
+    ok = client.post(f"{API}/auth/otp/verify", json={
+        "phone": body["phone"], "app": "rider", "code": r2.json()["dev_code"]})
+    assert ok.status_code == 200
+
+
+def test_sms_country_stays_on_sms_and_falls_back(client, whatsapp_on, monkeypatch):
+    from app.services.sms import ConsoleSms, ConsoleWhatsApp, SmsError
+
+    ConsoleWhatsApp.sent.clear()
+    r = client.post(f"{API}/auth/otp/request", json={"phone": "+23566123499", "app": "rider"}).json()
+    assert r["channel"] == "sms" and r["alternate_channel"] == "whatsapp"
+
+    async def broken(self, to, message):
+        raise SmsError("route down")
+
+    monkeypatch.setattr(ConsoleSms, "send", broken)
+    r = client.post(f"{API}/auth/otp/request", json={"phone": "+24106123499", "app": "rider"}).json()
+    assert r["channel"] == "whatsapp"  # SMS failed, WhatsApp delivered
+    assert ConsoleWhatsApp.sent[-1][0] == "+24106123499"
+
+
+def test_whatsapp_request_when_disabled(client):
+    r = client.post(f"{API}/auth/otp/request",
+                    json={"phone": "+237677440022", "app": "rider", "channel": "whatsapp"})
+    assert r.status_code == 422 and r.json()["detail"]["code"] == "channel_unavailable"

@@ -23,6 +23,7 @@ from ..core.security import (
 )
 from ..domain.countries import InvalidPhoneNumber, normalize_phone
 from ..domain.enums import Role
+from ..domain.otp_channels import ChannelUnavailable, channel_order, parse_countries
 from ..models.schemas import OtpRequestIn, OtpVerifyIn, RefreshIn, TokenOut
 from ..services import audit
 from ..services.otp import send_otp, verify_otp
@@ -55,12 +56,20 @@ async def request_otp(body: OtpRequestIn, request: Request) -> dict:
     otp_role = "staff" if body.app == "admin" else body.app
     if body.app == "admin" and await _staff_account(phone) is None:
         # Same response as success so the endpoint can't be used to find staff phones.
-        return {"sent": True, "phone": phone, "expires_in": s.otp_ttl_seconds}
+        try:
+            order = channel_order(body.channel, normalize_phone(phone).country, s.whatsapp_enabled,
+                                  parse_countries(s.otp_whatsapp_first_countries))
+        except ChannelUnavailable:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail={"code": "channel_unavailable"})
+        return {"sent": True, "phone": phone, "expires_in": s.otp_ttl_seconds,
+                "channel": order[0].value, "alternate_channel": order[1].value if len(order) > 1 else None}
 
-    code = await send_otp(phone, otp_role, body.language.value)
-    out = {"sent": True, "phone": phone, "expires_in": s.otp_ttl_seconds}
+    sent = await send_otp(phone, otp_role, body.language.value, body.channel)
+    out = {"sent": True, "phone": phone, "expires_in": s.otp_ttl_seconds,
+           "channel": sent.channel.value,
+           "alternate_channel": sent.alternate.value if sent.alternate else None}
     if s.is_dev and s.sms_provider == "console":
-        out["dev_code"] = code  # convenience for local development only
+        out["dev_code"] = sent.code  # convenience for local development only
     return out
 
 

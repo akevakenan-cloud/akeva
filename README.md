@@ -74,6 +74,7 @@ Set these in `backend/.env`. The API refuses to start in `AKEVA_ENV=production` 
 - `AKEVA_JWT_SECRET` and `AKEVA_OTP_PEPPER`: two different random strings, each 32 characters or more.
 - `AKEVA_STORAGE_KEYS`: the encryption key or keys, as `1:<base64 key>`. Generate a key with `python -c "from app.domain.crypto import generate_key; print(generate_key())"`. Keep the keys in a secret manager. **If you lose a key, every document encrypted with it is lost.** To rotate, add `2:<new key>` and set `AKEVA_STORAGE_CURRENT_KEY_ID=2`; old documents remain readable.
 - `AKEVA_SMS_PROVIDER`: `africastalking` or `twilio`, plus that provider's credentials. Check coverage and sender-ID registration rules for each of the six countries with the provider.
+- **WhatsApp login codes (optional but recommended):** `AKEVA_WHATSAPP_ENABLED=true`, your WhatsApp-enabled Twilio sender in `AKEVA_TWILIO_WHATSAPP_FROM`, and the `HX…` IDs of an approved WhatsApp *authentication* template (French and English) from Twilio's Content Template Builder. Countries listed in `AKEVA_OTP_WHATSAPP_FIRST_COUNTRIES` get WhatsApp first and every other country gets SMS first. If one channel fails, the other is tried automatically, and the login screens offer "Get the code on WhatsApp / by SMS" once. Remove a country from the list when its SMS sender ID is approved.
 - A MongoDB deployment with encryption at rest and backups (for example, MongoDB Atlas).
 
 The following are known limitations, each with a marked extension point in the code:

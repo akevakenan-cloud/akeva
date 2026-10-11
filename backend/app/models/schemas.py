@@ -42,6 +42,7 @@ class OtpRequestIn(_In):
     app: AppName
     country: str | None = None  # lets users type local numbers ("677 12 34 56")
     language: Language = Language.FR
+    channel: Literal["sms", "whatsapp"] | None = None  # None = best channel for the country
 
     _c = field_validator("country")(_country)
 
