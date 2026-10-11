@@ -8,7 +8,7 @@ import { useI18n } from "@/lib/i18n";
 import { useApi } from "@/lib/useApi";
 import { Loading } from "@/components/ui";
 
-type Overview = { pending_reviews: number; open_disputes: number; pending_deletions: number;
+type Overview = { pending_reviews: number; open_disputes: number; pending_deletions: number; pending_payouts: number;
   drivers: Record<string, number>; riders: Record<string, number> };
 
 const SECTIONS: { label: string; links: { href: string; key: string; count?: (o: Overview) => number; superOnly?: boolean }[] }[] = [
@@ -26,6 +26,7 @@ const SECTIONS: { label: string; links: { href: string; key: string; count?: (o:
       { href: "/live", key: "nav.live" },
       { href: "/rides", key: "nav.rides" },
       { href: "/disputes", key: "nav.disputes", count: (o) => o.open_disputes },
+      { href: "/payouts", key: "nav.payouts", count: (o) => o.pending_payouts },
       { href: "/finance", key: "nav.finance" },
     ],
   },

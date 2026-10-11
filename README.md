@@ -6,7 +6,7 @@ Ride-hailing platform for Central Africa: Cameroon, Chad, Gabon, Equatorial Guin
 |---|---|---|
 | `backend/` | FastAPI, MongoDB (Motor), JWT and phone OTP | Phase 1 done |
 | `admin/` | Next.js 15 (App Router), TypeScript, Mapbox GL | Phase 1 done |
-| `apps/driver`, `apps/rider` | Expo / React Native | Phase 2 |
+| `mobile/apps/rider`, `mobile/apps/driver` | Expo / React Native, Mapbox | Phase 2 done (see `mobile/README.md`) |
 
 All three apps share one API, one database and one login system (phone number plus SMS code).
 
@@ -42,6 +42,21 @@ All three apps share one API, one database and one login system (phone number pl
 | Platinum | From 2020 or newer, and either an ultra-luxury brand (Rolls-Royce, Bentley, Maybach…) or a flagship model (S-Class, 7 Series, LX, Range Rover…) |
 
 The highest eligible category wins. A car can also take rides in the car categories below its own. The brand and model lists are in `backend/app/domain/categorization.py`.
+
+## What phase 2 covers
+
+- **Ride flow:**
+  - Upfront estimates for all six categories.
+  - Matching in waves: the closest drivers within 5 km first, then 10 km after 20 seconds, then 15 km. A ride expires after 75 seconds if no one accepts.
+  - One driver per ride and one ride per driver, enforced atomically.
+  - Live tracking, then a final fare from the GPS path, capped at 130% of the upfront price.
+- **During and after a ride:** in-ride chat and calls, with numbers shared only while the ride is active; ratings; and disputes opened from the apps.
+- **Money:**
+  - Cash rides record the commission the driver owes.
+  - Mobile Money rides credit the driver once the payment is confirmed.
+  - Drivers request withdrawals, and staff send the money and record the transfer reference.
+- **Admin console:** cancel any ride (including one in progress), confirm or fail Mobile Money payments, and a payout queue.
+- **Rider and Driver apps:** described in `mobile/README.md`.
 
 ## Run it locally
 
@@ -108,6 +123,8 @@ admin/
 | Drivers | `PUT /drivers/me/vehicle` (returns the suggested category), `PUT /drivers/me/payout`, `POST /drivers/me/online`, `POST /drivers/me/location` |
 | Public | `GET /config` (countries, cities, categories, consent version), `POST /vehicles/categorize` |
 | Admin | `/admin/overview`, `/admin/users`, `/admin/users/{id}/status`, `/admin/users/{id}/category`, `/admin/files/{id}`, `/admin/live/drivers`, `/admin/rides`, `/admin/finance/summary`, `/admin/disputes`, `/admin/cities`, `/admin/pricing`, `/admin/audit-logs`, `/admin/staff`, `/admin/deletion-requests`, `/admin/export/{dataset}.csv` |
-| Realtime | `WS /ws/admin/live`. Send `{"token": "<access token>"}` as the first message. |
+| Rides | `POST /rides/estimate`, `POST /rides`, `GET /rides/active`, `GET /rides`, `GET /rides/{id}`, `POST /rides/{id}/accept`, `/decline`, `/arrive`, `/start`, `/complete`, `/cancel`, `/rating`, `/messages`, `/dispute` |
+| Driver money | `GET /drivers/me/offers`, `GET /drivers/me/earnings`, `POST /drivers/me/payouts`; admin: `/admin/rides/{id}/cancel`, `/admin/rides/{id}/payment`, `/admin/payouts` |
+| Realtime | `WS /ws/admin/live` (staff) and `WS /ws/me` (riders and drivers: offers, ride updates, driver location, chat). Send `{"token": "<access token>"}` as the first message. |
 
 Errors always have the form `{"detail": {"code": "...", ...}}`. The apps translate the `code`, so the API never returns user-facing text.

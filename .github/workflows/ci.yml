@@ -37,3 +37,20 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
           NEXT_TELEMETRY_DISABLED: "1"
+
+  mobile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Check Expo SDK versions
+        run: npx expo install --check
+        working-directory: mobile/apps/rider
+        continue-on-error: true  # reports drift without failing; fix with `npx expo install --fix`
+      - run: npm run typecheck
