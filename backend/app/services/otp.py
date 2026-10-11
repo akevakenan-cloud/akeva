@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+import httpx
 from fastapi import HTTPException, status
 
 from ..core.config import get_settings
 from ..core.db import aware, get_db, new_id, utcnow
 from ..domain.crypto import generate_otp, hash_secret, verify_secret
-from .sms import get_sms_provider
+from .sms import SmsError, get_sms_provider
 
 MESSAGES = {
     "fr": "Votre code Akeva est {code}. Il expire dans {minutes} min. Ne le partagez avec personne.",
@@ -39,7 +40,12 @@ async def send_otp(phone: str, role: str, language: str = "fr") -> str:
         "expires_at": utcnow() + timedelta(seconds=s.otp_ttl_seconds),
     })
     template = MESSAGES.get(language, MESSAGES["fr"])
-    await get_sms_provider().send(phone, template.format(code=code, minutes=s.otp_ttl_seconds // 60))
+    try:
+        await get_sms_provider().send(phone, template.format(code=code, minutes=s.otp_ttl_seconds // 60))
+    except (SmsError, httpx.HTTPError):
+        # Don't leave a code nobody received, or the user would be blocked by the resend timer.
+        await db.otp_codes.delete_many({"phone": phone, "role": role})
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail={"code": "sms_unavailable"})
     return code
 
 

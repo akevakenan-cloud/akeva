@@ -51,17 +51,34 @@ class AfricasTalkingSms:
 
 
 class TwilioSms:
+    """Sends through a Messaging Service if configured, else from a number or sender ID.
+
+    Alphanumeric sender IDs ("AKEVA") are only accepted in some countries and may
+    need registration; a Messaging Service lets Twilio pick a valid sender per country.
+    """
+
     def __init__(self, s: Settings):
-        self.sid, self.token, self.sender = (
-            s.twilio_account_sid, s.twilio_auth_token, s.twilio_from_number)
+        self.sid, self.token = s.twilio_account_sid, s.twilio_auth_token
+        self.service_sid = s.twilio_messaging_service_sid
+        self.sender = s.twilio_from_number or s.sms_sender_id
 
     async def send(self, to_e164: str, message: str) -> None:
         url = f"https://api.twilio.com/2010-04-01/Accounts/{self.sid}/Messages.json"
+        data = {"To": to_e164, "Body": message}
+        if self.service_sid:
+            data["MessagingServiceSid"] = self.service_sid
+        else:
+            data["From"] = self.sender
         async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.post(url, auth=(self.sid, self.token),
-                                  data={"To": to_e164, "From": self.sender, "Body": message})
+            r = await client.post(url, auth=(self.sid, self.token), data=data)
         if r.status_code >= 300:
-            raise SmsError(f"Twilio returned {r.status_code}")
+            # Twilio's error code (e.g. 21612 unsupported route) helps diagnose delivery issues.
+            try:
+                detail = r.json().get("code")
+            except ValueError:
+                detail = None
+            log.error("Twilio send failed: HTTP %s, Twilio code %s", r.status_code, detail)
+            raise SmsError(f"Twilio returned {r.status_code} (code {detail})")
 
 
 def get_sms_provider() -> SmsProvider:

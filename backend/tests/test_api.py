@@ -238,3 +238,18 @@ def test_export_csv(client, login, admin_headers):
     r = client.get(f"{API}/admin/export/riders.csv", headers=admin_headers)
     assert r.status_code == 200
     assert "+237677888999" in r.text and r.text.startswith("﻿id,")
+
+
+def test_sms_failure_returns_503_and_allows_retry(client, monkeypatch):
+    from app.services.sms import ConsoleSms, SmsError
+
+    async def broken(self, to, message):
+        raise SmsError("provider down")
+
+    monkeypatch.setattr(ConsoleSms, "send", broken)
+    body = {"phone": "+237677999000", "app": "rider"}
+    r = client.post(f"{API}/auth/otp/request", json=body)
+    assert r.status_code == 503 and r.json()["detail"]["code"] == "sms_unavailable"
+    monkeypatch.undo()
+    # no stale code was left behind, so the resend timer doesn't block the retry
+    assert client.post(f"{API}/auth/otp/request", json=body).status_code == 200

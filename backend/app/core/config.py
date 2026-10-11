@@ -35,7 +35,8 @@ class Settings(BaseSettings):
     africastalking_api_key: str = ""
     twilio_account_sid: str = ""
     twilio_auth_token: str = ""
-    twilio_from_number: str = ""
+    twilio_from_number: str = ""  # a Twilio number, or leave empty to use the sender ID
+    twilio_messaging_service_sid: str = ""  # MG…; preferred when set (handles sender per country)
 
     # Rate limits (requests per window)
     otp_requests_per_phone_per_hour: int = 5
@@ -65,6 +66,8 @@ class Settings(BaseSettings):
                 problems.append("AKEVA_STORAGE_KEYS must be set")
             if self.sms_provider == "console":
                 problems.append("AKEVA_SMS_PROVIDER cannot be 'console' in production")
+            if self.sms_provider == "twilio" and not (self.twilio_account_sid and self.twilio_auth_token):
+                problems.append("AKEVA_TWILIO_ACCOUNT_SID and AKEVA_TWILIO_AUTH_TOKEN must be set")
             if problems:
                 raise ValueError("; ".join(problems))
         return self
