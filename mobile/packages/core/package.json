@@ -1,0 +1,24 @@
+{
+  "name": "@akeva/core",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "peerDependencies": {
+    "@react-native-async-storage/async-storage": "*",
+    "@rnmapbox/maps": "*",
+    "expo": "*",
+    "expo-camera": "*",
+    "expo-constants": "*",
+    "expo-document-picker": "*",
+    "expo-image-manipulator": "*",
+    "expo-localization": "*",
+    "expo-location": "*",
+    "expo-router": "*",
+    "expo-secure-store": "*",
+    "react": "*",
+    "react-native": "*",
+    "react-native-safe-area-context": "*"
+  }
+}

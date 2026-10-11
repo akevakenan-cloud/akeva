@@ -1,0 +1,10 @@
+{
+  "name": "akeva-mobile",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "rider": "npm --workspace akeva-rider run start",
+    "driver": "npm --workspace akeva-driver run start",
+    "typecheck": "npm --workspace @akeva/core run typecheck && npm --workspace akeva-rider run typecheck && npm --workspace akeva-driver run typecheck"
+  }
+}

@@ -18,3 +18,9 @@ admin/.env.local
 .DS_Store
 .idea/
 .vscode/
+
+# Expo
+.expo/
+mobile/apps/*/android/
+mobile/apps/*/ios/
+mobile/apps/*/.env
